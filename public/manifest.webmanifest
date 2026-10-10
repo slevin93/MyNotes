@@ -1,0 +1,17 @@
+{
+  "name": "My Notes",
+  "short_name": "Notes",
+  "description": "A private space for your notes",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#00A155",
+  "icons": [
+    {
+      "src": "/notes-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
