@@ -4,7 +4,7 @@ A private, self-hosted notes app built with Nuxt. Accounts, sessions, workspaces
 
 ## Setup
 
-Use Node.js 22.22.3 or newer, then install dependencies and start the development server:
+Use Node.js 22.22.3 or newer with npm 10.9.4 or newer, then install dependencies and start the development server:
 
 ```bash
 npm install
