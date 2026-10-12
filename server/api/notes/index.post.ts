@@ -43,13 +43,14 @@ export default defineEventHandler(async (event): Promise<Note> => {
   db.prepare('INSERT INTO notes (id, user_id, workspace_id, parent_id, title) VALUES (?, ?, ?, ?, ?)')
     .run(id, user.id, workspaceId, parentId, title)
   const created = db.prepare(`
-    SELECT id, workspace_id, parent_id, title, content, created_at, updated_at
+    SELECT id, workspace_id, parent_id, title, icon, content, created_at, updated_at
     FROM notes WHERE id = ? AND user_id = ?
   `).get(id, user.id) as {
     id: string
     workspace_id: string
     parent_id: string | null
     title: string
+    icon: string
     content: string
     created_at: string
     updated_at: string
@@ -60,6 +61,7 @@ export default defineEventHandler(async (event): Promise<Note> => {
     workspaceId: created.workspace_id,
     parentId: created.parent_id,
     title: created.title,
+    icon: created.icon,
     content: created.content,
     createdAt: created.created_at,
     updatedAt: created.updated_at

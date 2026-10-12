@@ -84,29 +84,104 @@ function createNoteTree(items: Note[]): NoteTreeItem[] {
 }
 
 const noteTree = computed(() => createNoteTree(notes.value ?? []))
-const createWorkspaceOpen = ref(false)
+const workspaceDialogOpen = ref(false)
+const workspaceDialogMode = ref<'create' | 'rename'>('create')
+const editingWorkspaceId = ref<string | null>(null)
 const workspaceName = ref('')
 const workspaceError = ref('')
+const deleteDialogOpen = ref(false)
+const deleteInProgress = ref(false)
+const deleteTarget = ref<{ type: 'note', id: string, name: string } | { type: 'workspace', id: string, name: string } | null>(null)
+
+function openCreateWorkspace() {
+  workspaceDialogMode.value = 'create'
+  editingWorkspaceId.value = null
+  workspaceName.value = ''
+  workspaceError.value = ''
+  workspaceDialogOpen.value = true
+}
+
+function openRenameWorkspace() {
+  if (!activeWorkspace.value) {
+    return
+  }
+  workspaceDialogMode.value = 'rename'
+  editingWorkspaceId.value = activeWorkspace.value.id
+  workspaceName.value = activeWorkspace.value.name
+  workspaceError.value = ''
+  workspaceDialogOpen.value = true
+}
+
+function requestDeleteWorkspace() {
+  if (!activeWorkspace.value) {
+    return
+  }
+  deleteTarget.value = {
+    type: 'workspace',
+    id: activeWorkspace.value.id,
+    name: activeWorkspace.value.name
+  }
+  deleteDialogOpen.value = true
+}
+
+function noteIsInSubtree(noteId: string, rootId: string) {
+  let current = notes.value?.find(note => note.id === noteId)
+  while (current) {
+    if (current.id === rootId) {
+      return true
+    }
+    const parentId = current.parentId
+    current = parentId ? notes.value?.find(note => note.id === parentId) : undefined
+  }
+  return false
+}
 
 async function selectWorkspace(workspaceId: string) {
   if (workspaceId === activeWorkspaceId.value) {
+    closeMobileSidebar()
     return
   }
 
   await router.push({ path: '/', query: { workspace: workspaceId } })
+  closeMobileSidebar()
 }
 
-async function createWorkspace() {
+function closeMobileSidebar() {
+  if (import.meta.client && window.matchMedia('(max-width: 1023px)').matches) {
+    open.value = false
+  }
+}
+
+async function selectNote(id: string) {
+  await router.push({ path: '/', query: { workspace: activeWorkspaceId.value, note: id } })
+  closeMobileSidebar()
+}
+
+async function saveWorkspace() {
   workspaceError.value = ''
   try {
-    const workspace = await $fetch<Workspace>('/api/workspaces', {
-      method: 'POST',
-      body: { name: workspaceName.value }
-    })
+    let workspaceId = editingWorkspaceId.value
+    if (workspaceDialogMode.value === 'create') {
+      const workspace = await $fetch<Workspace>('/api/workspaces', {
+        method: 'POST',
+        body: { name: workspaceName.value }
+      })
+      workspaceId = workspace.id
+    } else {
+      if (!workspaceId) {
+        throw new Error('No workspace was selected to rename.')
+      }
+      await $fetch(`/api/workspaces/${workspaceId}`, {
+        method: 'PATCH',
+        body: { name: workspaceName.value }
+      })
+    }
     await refreshWorkspaces()
-    createWorkspaceOpen.value = false
+    workspaceDialogOpen.value = false
     workspaceName.value = ''
-    await router.push({ path: '/', query: { workspace: workspace.id } })
+    if (workspaceDialogMode.value === 'create' && workspaceId) {
+      await router.push({ path: '/', query: { workspace: workspaceId } })
+    }
   } catch (error) {
     workspaceError.value = getErrorMessage(error)
   }
@@ -125,46 +200,70 @@ async function addNote(parentId: string | null = null) {
     })
     await refreshNotes()
     await router.push({ path: '/', query: { workspace: note.workspaceId, note: note.id } })
+    closeMobileSidebar()
   } catch (error) {
     toast.add({ title: 'Could not create note', description: getErrorMessage(error), color: 'error' })
   }
 }
 
-async function deleteNote(id: string) {
-  if (!window.confirm('Delete this note and all of its child notes? This cannot be undone.')) {
+function deleteNote(id: string) {
+  const note = notes.value?.find(item => item.id === id)
+  deleteTarget.value = { type: 'note', id, name: note?.title ?? 'this note' }
+  deleteDialogOpen.value = true
+}
+
+async function confirmDelete() {
+  const target = deleteTarget.value
+  if (!target || deleteInProgress.value) {
     return
   }
 
+  deleteInProgress.value = true
   try {
-    if (!activeWorkspaceId.value) {
-      return
+    if (target.type === 'note') {
+      if (!activeWorkspaceId.value) {
+        throw new Error('No workspace is selected.')
+      }
+      const selectedId = typeof route.query.note === 'string' ? route.query.note : null
+      if (selectedId && noteIsInSubtree(selectedId, target.id)) {
+        await router.push({ path: '/', query: { workspace: activeWorkspaceId.value } })
+        if (route.query.note === selectedId) {
+          throw new Error('Could not save the selected note before deleting it.')
+        }
+      }
+      await $fetch(`/api/notes/${target.id}`, {
+        method: 'DELETE',
+        query: { workspaceId: activeWorkspaceId.value }
+      })
+      await refreshNotes()
+    } else {
+      const otherWorkspace = workspaces.value?.find(workspace => workspace.id !== target.id)
+      await router.push({
+        path: '/',
+        query: otherWorkspace ? { workspace: otherWorkspace.id } : {}
+      })
+      if (typeof route.query.note === 'string') {
+        throw new Error('Could not save the selected note before deleting its workspace.')
+      }
+      await $fetch(`/api/workspaces/${target.id}`, { method: 'DELETE' })
+      await refreshWorkspaces()
+      const nextWorkspace = workspaces.value?.[0]
+      await router.push({
+        path: '/',
+        query: nextWorkspace ? { workspace: nextWorkspace.id } : {}
+      })
     }
 
-    await $fetch(`/api/notes/${id}`, {
-      method: 'DELETE',
-      query: { workspaceId: activeWorkspaceId.value }
-    })
-    const selectedId = typeof route.query.note === 'string' ? route.query.note : null
-    if (selectedId && notes.value?.some(note => note.id === selectedId)) {
-      const selected = notes.value.find(note => note.id === selectedId)
-      let ancestor = selected?.parentId ?? null
-      const descendants = new Set<string>([id])
-      let deleted = selectedId === id
-      while (ancestor) {
-        if (descendants.has(ancestor)) {
-          deleted = true
-          break
-        }
-        const parent = notes.value?.find(note => note.id === ancestor)
-        ancestor = parent?.parentId ?? null
-      }
-      if (deleted) {
-        await router.push({ path: '/', query: { workspace: activeWorkspaceId.value } })
-      }
-    }
-    await refreshNotes()
+    deleteDialogOpen.value = false
+    deleteTarget.value = null
   } catch (error) {
-    toast.add({ title: 'Could not delete note', description: getErrorMessage(error), color: 'error' })
+    toast.add({
+      title: target.type === 'note' ? 'Could not delete note' : 'Could not delete workspace',
+      description: getErrorMessage(error),
+      color: 'error'
+    })
+  } finally {
+    deleteInProgress.value = false
   }
 }
 
@@ -185,15 +284,26 @@ const workspaceItems = computed<DropdownMenuItem[][]>(() => [
       selectWorkspace(workspace.id)
     }
   })),
-  [{
-    label: 'Create workspace',
-    icon: 'i-lucide-plus',
-    onSelect() {
-      workspaceName.value = ''
-      workspaceError.value = ''
-      createWorkspaceOpen.value = true
+  [
+    {
+      label: 'Create workspace',
+      icon: 'i-lucide-plus',
+      onSelect: openCreateWorkspace
+    },
+    {
+      label: 'Rename workspace',
+      icon: 'i-lucide-pencil',
+      disabled: !activeWorkspace.value,
+      onSelect: openRenameWorkspace
+    },
+    {
+      label: 'Delete workspace',
+      icon: 'i-lucide-trash-2',
+      color: 'error',
+      disabled: !activeWorkspace.value,
+      onSelect: requestDeleteWorkspace
     }
-  }]
+  ]
 ])
 
 const userItems = computed<DropdownMenuItem[][]>(() => [
@@ -264,29 +374,41 @@ function getErrorMessage(error: unknown) {
         body: 'py-0'
       }"
     >
-      <template #header>
-        <UDropdownMenu
-          :items="workspaceItems"
-          :content="{ align: 'start', collisionPadding: 12 }"
-          :ui="{ content: 'w-(--reka-dropdown-menu-trigger-width) min-w-48' }"
-        >
+      <template #header="{ state, open: sidebarOpen }">
+        <div class="flex min-w-0 items-center gap-1">
+          <UDropdownMenu
+            v-if="state === 'expanded'"
+            :items="workspaceItems"
+            :content="{ align: 'start', collisionPadding: 12 }"
+            :ui="{ content: 'w-(--reka-dropdown-menu-trigger-width) min-w-48' }"
+          >
+            <UButton
+              icon="i-lucide-panels-top-left"
+              :label="activeWorkspace?.name ?? 'Workspaces'"
+              trailing-icon="i-lucide-chevrons-up-down"
+              color="neutral"
+              variant="ghost"
+              class="min-w-0 flex-1 justify-start overflow-hidden"
+              :ui="{ trailingIcon: 'text-dimmed ms-auto' }"
+            />
+          </UDropdownMenu>
           <UButton
-            icon="i-lucide-panels-top-left"
-            :label="activeWorkspace?.name ?? 'Workspaces'"
-            trailing-icon="i-lucide-chevrons-up-down"
+            :icon="sidebarOpen ? 'i-lucide-panel-left-close' : 'i-lucide-panel-left-open'"
             color="neutral"
             variant="ghost"
-            class="min-w-0 flex-1 justify-start overflow-hidden"
-            :ui="{ trailingIcon: 'text-dimmed ms-auto' }"
+            size="xs"
+            :aria-label="sidebarOpen ? 'Close sidebar' : 'Open sidebar'"
+            :title="sidebarOpen ? 'Close sidebar' : 'Open sidebar'"
+            @click="open = !open"
           />
-        </UDropdownMenu>
-        <div class="flex items-center gap-1">
           <UButton
+            v-if="state === 'expanded'"
             icon="i-lucide-plus"
             color="neutral"
             variant="ghost"
             size="xs"
             aria-label="Create note in this workspace"
+            title="Create note"
             @click="addNote()"
           />
         </div>
@@ -300,7 +422,7 @@ function getErrorMessage(error: unknown) {
           <NoteTree
             :items="noteTree"
             :selected-id="typeof route.query.note === 'string' ? route.query.note : null"
-            @select="id => router.push({ path: '/', query: { workspace: activeWorkspaceId, note: id } })"
+            @select="selectNote"
             @create-child="addNote"
             @delete="deleteNote"
           />
@@ -338,24 +460,33 @@ function getErrorMessage(error: unknown) {
     </USidebar>
 
     <main class="flex min-w-0 flex-1 flex-col">
-      <header class="flex h-(--ui-header-height) shrink-0 items-center border-b border-default px-4">
+      <header class="sticky top-0 z-10 flex h-(--ui-header-height) shrink-0 items-center gap-2 border-b border-default bg-default/95 px-3 backdrop-blur sm:px-4">
         <UButton
-          icon="i-lucide-panel-left"
+          :icon="open ? 'i-lucide-panel-left-close' : 'i-lucide-panel-left-open'"
           color="neutral"
           variant="ghost"
-          aria-label="Toggle sidebar"
+          :aria-label="open ? 'Close sidebar' : 'Open sidebar'"
+          :title="open ? 'Close sidebar' : 'Open sidebar'"
           @click="open = !open"
         />
+        <UButton
+          icon="i-lucide-plus"
+          label="New note"
+          color="neutral"
+          variant="outline"
+          class="ms-auto"
+          @click="addNote()"
+        />
       </header>
-      <div class="min-h-0 flex-1 p-4 md:p-8">
+      <div class="min-h-0 flex-1 p-3 sm:p-4 md:p-8">
         <NuxtPage class="size-full" />
       </div>
     </main>
   </div>
   <UModal
-    v-model:open="createWorkspaceOpen"
-    title="Create workspace"
-    description="Give this workspace a name. Its notes will stay separate from other workspaces."
+    v-model:open="workspaceDialogOpen"
+    :title="workspaceDialogMode === 'create' ? 'Create workspace' : 'Rename workspace'"
+    :description="workspaceDialogMode === 'create' ? 'Give this workspace a name. Its notes will stay separate from other workspaces.' : 'Choose a new name for this workspace.'"
     :ui="{
       overlay: 'z-[100]',
       content: 'z-[101]'
@@ -364,7 +495,7 @@ function getErrorMessage(error: unknown) {
     <template #body>
       <form
         class="space-y-4"
-        @submit.prevent="createWorkspace"
+        @submit.prevent="saveWorkspace"
       >
         <UFormField
           label="Workspace name"
@@ -383,7 +514,7 @@ function getErrorMessage(error: unknown) {
           v-if="workspaceError"
           color="error"
           variant="subtle"
-          title="Could not create workspace"
+          :title="workspaceDialogMode === 'create' ? 'Could not create workspace' : 'Could not rename workspace'"
           :description="workspaceError"
         />
         <div class="flex justify-end gap-2">
@@ -391,15 +522,45 @@ function getErrorMessage(error: unknown) {
             label="Cancel"
             color="neutral"
             variant="ghost"
-            @click="createWorkspaceOpen = false"
+            @click="workspaceDialogOpen = false"
           />
           <UButton
             type="submit"
-            label="Create workspace"
+            :label="workspaceDialogMode === 'create' ? 'Create workspace' : 'Save name'"
             :disabled="!workspaceName.trim()"
           />
         </div>
       </form>
+    </template>
+  </UModal>
+  <UModal
+    v-model:open="deleteDialogOpen"
+    :title="deleteTarget?.type === 'workspace' ? 'Delete workspace?' : 'Delete note?'"
+    :description="deleteTarget?.type === 'workspace'
+      ? `“${deleteTarget.name}” and all of its notes will be permanently deleted. This cannot be undone.`
+      : `“${deleteTarget?.name}” and all of its child notes will be permanently deleted. This cannot be undone.`"
+    :ui="{
+      overlay: 'z-[100]',
+      content: 'z-[101]'
+    }"
+    @update:open="open => !open && !deleteInProgress && (deleteTarget = null)"
+  >
+    <template #footer>
+      <div class="flex justify-end gap-2">
+        <UButton
+          label="Cancel"
+          color="neutral"
+          variant="ghost"
+          :disabled="deleteInProgress"
+          @click="deleteDialogOpen = false; deleteTarget = null"
+        />
+        <UButton
+          label="Delete"
+          color="error"
+          :loading="deleteInProgress"
+          @click="confirmDelete"
+        />
+      </div>
     </template>
   </UModal>
 </template>

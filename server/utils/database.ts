@@ -48,6 +48,7 @@ export function useDatabase() {
       workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
       parent_id TEXT REFERENCES notes(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
+      icon TEXT NOT NULL DEFAULT 'i-lucide-file-text',
       content TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -68,6 +69,9 @@ export function useDatabase() {
   const noteColumns = database.pragma('table_info(notes)') as { name: string }[]
   if (!noteColumns.some(column => column.name === 'workspace_id')) {
     database.exec('ALTER TABLE notes ADD COLUMN workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE')
+  }
+  if (!noteColumns.some(column => column.name === 'icon')) {
+    database.exec('ALTER TABLE notes ADD COLUMN icon TEXT NOT NULL DEFAULT \'i-lucide-file-text\'')
   }
 
   const migrateWorkspaces = database.transaction(() => {

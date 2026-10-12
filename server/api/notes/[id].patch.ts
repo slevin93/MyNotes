@@ -1,10 +1,12 @@
 import { createError, getQuery, readBody } from 'h3'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { useDatabase } from '../../utils/database'
+import { isSupportedNoteIcon } from '../../utils/note-icons'
 
 interface UpdateNoteBody {
   title?: unknown
   content?: unknown
+  icon?: unknown
 }
 
 export default defineEventHandler(async (event) => {
@@ -17,10 +19,12 @@ export default defineEventHandler(async (event) => {
   const body = await readBody<UpdateNoteBody | null>(event) ?? {}
   const hasTitle = Object.hasOwn(body, 'title')
   const hasContent = Object.hasOwn(body, 'content')
+  const hasIcon = Object.hasOwn(body, 'icon')
   const title = typeof body.title === 'string' ? body.title.trim() : undefined
   const content = typeof body.content === 'string' ? body.content : undefined
+  const icon = body.icon
 
-  if (!hasTitle && !hasContent) {
+  if (!hasTitle && !hasContent && !hasIcon) {
     throw createError({ statusCode: 400, statusMessage: 'No note changes were provided' })
   }
   if (hasTitle && (!title || title.length > 200)) {
@@ -29,19 +33,25 @@ export default defineEventHandler(async (event) => {
   if (hasContent && (content === undefined || content.length > 1_000_000)) {
     throw createError({ statusCode: 400, statusMessage: 'Note content is invalid or too large' })
   }
+  if (hasIcon && !isSupportedNoteIcon(icon)) {
+    throw createError({ statusCode: 400, statusMessage: 'Unsupported note icon' })
+  }
 
   const db = useDatabase()
   const result = db.prepare(`
     UPDATE notes
     SET title = CASE WHEN ? THEN ? ELSE title END,
         content = CASE WHEN ? THEN ? ELSE content END,
-        updated_at = CURRENT_TIMESTAMP
+        icon = CASE WHEN ? THEN ? ELSE icon END,
+    updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND user_id = ? AND workspace_id = ?
   `).run(
     hasTitle ? 1 : 0,
     title ?? '',
     hasContent ? 1 : 0,
     content ?? '',
+    hasIcon ? 1 : 0,
+    typeof icon === 'string' ? icon : '',
     id,
     user.id,
     workspaceId

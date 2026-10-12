@@ -14,6 +14,7 @@ export interface Note {
   workspaceId: string
   parentId: string | null
   title: string
+  icon: string
   content: string
   createdAt: string
   updatedAt: string

@@ -8,6 +8,7 @@ interface NoteRecord {
   workspace_id: string
   parent_id: string | null
   title: string
+  icon: string
   content: string
   created_at: string
   updated_at: string
@@ -26,7 +27,7 @@ export default defineEventHandler((event): Note[] => {
   }
 
   const rows = db.prepare(`
-    SELECT id, workspace_id, parent_id, title, content, created_at, updated_at
+    SELECT id, workspace_id, parent_id, title, icon, content, created_at, updated_at
     FROM notes
     WHERE user_id = ? AND workspace_id = ?
     ORDER BY created_at, id
@@ -37,6 +38,7 @@ export default defineEventHandler((event): Note[] => {
     workspaceId: row.workspace_id,
     parentId: row.parent_id,
     title: row.title,
+    icon: row.icon,
     content: row.content,
     createdAt: row.created_at,
     updatedAt: row.updated_at

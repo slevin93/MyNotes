@@ -30,7 +30,7 @@ const emit = defineEmits<{
           @click="emit('select', item.id)"
         >
           <UIcon
-            name="i-lucide-file-text"
+            :name="item.icon"
             class="size-4 shrink-0"
           />
           <span class="truncate">{{ item.title }}</span>
