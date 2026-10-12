@@ -89,6 +89,7 @@ const workspaceDialogMode = ref<'create' | 'rename'>('create')
 const editingWorkspaceId = ref<string | null>(null)
 const workspaceName = ref('')
 const workspaceError = ref('')
+const workspaceDeleteConfirmation = ref(false)
 const deleteDialogOpen = ref(false)
 const deleteInProgress = ref(false)
 const deleteTarget = ref<{ type: 'note', id: string, name: string } | { type: 'workspace', id: string, name: string } | null>(null)
@@ -98,10 +99,11 @@ function openCreateWorkspace() {
   editingWorkspaceId.value = null
   workspaceName.value = ''
   workspaceError.value = ''
+  workspaceDeleteConfirmation.value = false
   workspaceDialogOpen.value = true
 }
 
-function openRenameWorkspace() {
+function openManageWorkspace() {
   if (!activeWorkspace.value) {
     return
   }
@@ -109,6 +111,7 @@ function openRenameWorkspace() {
   editingWorkspaceId.value = activeWorkspace.value.id
   workspaceName.value = activeWorkspace.value.name
   workspaceError.value = ''
+  workspaceDeleteConfirmation.value = false
   workspaceDialogOpen.value = true
 }
 
@@ -121,7 +124,16 @@ function requestDeleteWorkspace() {
     id: activeWorkspace.value.id,
     name: activeWorkspace.value.name
   }
-  deleteDialogOpen.value = true
+  workspaceDeleteConfirmation.value = true
+}
+
+function onWorkspaceDialogOpenChange(isOpen: boolean) {
+  if (!isOpen) {
+    workspaceDeleteConfirmation.value = false
+    if (deleteTarget.value?.type === 'workspace') {
+      deleteTarget.value = null
+    }
+  }
 }
 
 function noteIsInSubtree(noteId: string, rootId: string) {
@@ -256,6 +268,10 @@ async function confirmDelete() {
 
     deleteDialogOpen.value = false
     deleteTarget.value = null
+    if (target.type === 'workspace') {
+      workspaceDialogOpen.value = false
+      workspaceDeleteConfirmation.value = false
+    }
   } catch (error) {
     toast.add({
       title: target.type === 'note' ? 'Could not delete note' : 'Could not delete workspace',
@@ -286,22 +302,15 @@ const workspaceItems = computed<DropdownMenuItem[][]>(() => [
   })),
   [
     {
+      label: 'Edit workspace',
+      icon: 'i-lucide-pencil',
+      disabled: !activeWorkspace.value,
+      onSelect: openManageWorkspace
+    },
+    {
       label: 'Create workspace',
       icon: 'i-lucide-plus',
       onSelect: openCreateWorkspace
-    },
-    {
-      label: 'Rename workspace',
-      icon: 'i-lucide-pencil',
-      disabled: !activeWorkspace.value,
-      onSelect: openRenameWorkspace
-    },
-    {
-      label: 'Delete workspace',
-      icon: 'i-lucide-trash-2',
-      color: 'error',
-      disabled: !activeWorkspace.value,
-      onSelect: requestDeleteWorkspace
     }
   ]
 ])
@@ -401,24 +410,28 @@ function getErrorMessage(error: unknown) {
             :title="sidebarOpen ? 'Close sidebar' : 'Open sidebar'"
             @click="open = !open"
           />
-          <UButton
-            v-if="state === 'expanded'"
-            icon="i-lucide-plus"
-            color="neutral"
-            variant="ghost"
-            size="xs"
-            aria-label="Create note in this workspace"
-            title="Create note"
-            @click="addNote()"
-          />
         </div>
       </template>
 
       <template #default>
         <div class="space-y-1 px-2 py-3">
-          <p class="px-2 pb-1 text-xs font-medium uppercase tracking-wide text-muted">
-            {{ activeWorkspace?.name ?? 'Notes' }}
-          </p>
+          <div class="flex items-center justify-between gap-2 px-2 pb-1">
+            <p class="min-w-0 truncate text-xs font-medium uppercase tracking-wide text-muted">
+              {{ activeWorkspace?.name ?? 'Notes' }}
+            </p>
+            <div class="flex shrink-0 items-center gap-1">
+              <UButton
+                v-if="activeWorkspace"
+                icon="i-lucide-plus"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                aria-label="Create note in this workspace"
+                title="Create note"
+                @click="addNote()"
+              />
+            </div>
+          </div>
           <NoteTree
             :items="noteTree"
             :selected-id="typeof route.query.note === 'string' ? route.query.note : null"
@@ -485,12 +498,13 @@ function getErrorMessage(error: unknown) {
   </div>
   <UModal
     v-model:open="workspaceDialogOpen"
-    :title="workspaceDialogMode === 'create' ? 'Create workspace' : 'Rename workspace'"
-    :description="workspaceDialogMode === 'create' ? 'Give this workspace a name. Its notes will stay separate from other workspaces.' : 'Choose a new name for this workspace.'"
+    :title="workspaceDialogMode === 'create' ? 'Create workspace' : 'Edit workspace'"
+    :description="workspaceDialogMode === 'create' ? 'Give this workspace a name. Its notes will stay separate from other workspaces.' : 'Update the workspace name or delete this workspace.'"
     :ui="{
       overlay: 'z-[100]',
       content: 'z-[101]'
     }"
+    @update:open="onWorkspaceDialogOpenChange"
   >
     <template #body>
       <form
@@ -514,31 +528,70 @@ function getErrorMessage(error: unknown) {
           v-if="workspaceError"
           color="error"
           variant="subtle"
-          :title="workspaceDialogMode === 'create' ? 'Could not create workspace' : 'Could not rename workspace'"
+          :title="workspaceDialogMode === 'create' ? 'Could not create workspace' : 'Could not update workspace'"
           :description="workspaceError"
         />
-        <div class="flex justify-end gap-2">
+        <UAlert
+          v-if="workspaceDialogMode === 'rename' && workspaceDeleteConfirmation"
+          color="error"
+          variant="subtle"
+          title="Delete this workspace?"
+          :description="`“${deleteTarget?.name}” and all of its notes will be permanently deleted. This cannot be undone.`"
+        />
+        <div class="flex flex-wrap items-center justify-between gap-2">
           <UButton
-            label="Cancel"
-            color="neutral"
+            v-if="workspaceDialogMode === 'rename' && !workspaceDeleteConfirmation"
+            type="button"
+            label="Delete workspace"
+            icon="i-lucide-trash-2"
+            color="error"
             variant="ghost"
-            @click="workspaceDialogOpen = false"
+            @click="requestDeleteWorkspace"
           />
-          <UButton
-            type="submit"
-            :label="workspaceDialogMode === 'create' ? 'Create workspace' : 'Save name'"
-            :disabled="!workspaceName.trim()"
-          />
+          <div
+            v-else-if="workspaceDialogMode === 'rename'"
+            class="flex gap-2"
+          >
+            <UButton
+              type="button"
+              label="Cancel"
+              color="neutral"
+              variant="ghost"
+              @click="workspaceDeleteConfirmation = false"
+            />
+            <UButton
+              type="button"
+              label="Delete workspace"
+              color="error"
+              :loading="deleteInProgress"
+              @click="confirmDelete"
+            />
+          </div>
+          <div
+            v-if="!workspaceDeleteConfirmation"
+            class="ms-auto flex gap-2"
+          >
+            <UButton
+              type="button"
+              label="Cancel"
+              color="neutral"
+              variant="ghost"
+              @click="workspaceDialogOpen = false"
+            />
+            <UButton
+              type="submit"
+              :label="workspaceDialogMode === 'create' ? 'Create workspace' : 'Save name'"
+              :disabled="!workspaceName.trim()"
+            />
+          </div>
         </div>
       </form>
     </template>
   </UModal>
   <UModal
     v-model:open="deleteDialogOpen"
-    :title="deleteTarget?.type === 'workspace' ? 'Delete workspace?' : 'Delete note?'"
-    :description="deleteTarget?.type === 'workspace'
-      ? `“${deleteTarget.name}” and all of its notes will be permanently deleted. This cannot be undone.`
-      : `“${deleteTarget?.name}” and all of its child notes will be permanently deleted. This cannot be undone.`"
+    title="Delete note?"
+    :description="`“${deleteTarget?.name}” and all of its child notes will be permanently deleted. This cannot be undone.`"
     :ui="{
       overlay: 'z-[100]',
       content: 'z-[101]'
