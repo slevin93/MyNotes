@@ -90,14 +90,6 @@ async function login() {
           :loading="isSubmitting"
         />
       </form>
-
-      <p class="mt-5 text-center text-sm text-muted">
-        Don't have an account?
-        <NuxtLink
-          to="/register"
-          class="font-medium text-primary hover:underline"
-        >Create one</NuxtLink>
-      </p>
     </UPageCard>
   </main>
 </template>

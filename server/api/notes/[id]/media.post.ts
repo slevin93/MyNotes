@@ -7,17 +7,18 @@ import { useDatabase } from '../../../utils/database'
 import { getMediaDirectory, getUploadedMediaType } from '../../../utils/media'
 
 export default defineEventHandler(async (event) => {
-  const user = requireAuthenticatedUser(event)
+  const user = await requireAuthenticatedUser(event)
   const { id: noteId } = getRouterParams(event)
   const workspaceId = getQuery(event).workspaceId
   if (typeof workspaceId !== 'string' || !workspaceId) {
     throw createError({ statusCode: 400, statusMessage: 'Workspace is required' })
   }
 
-  const db = useDatabase()
-  if (!db.prepare(`
-    SELECT 1 FROM notes WHERE id = ? AND user_id = ? AND workspace_id = ?
-  `).get(noteId, user.id, workspaceId)) {
+  const db = await useDatabase()
+  const note = await db.query(`
+    SELECT 1 FROM notes WHERE id = $1 AND user_id = $2 AND workspace_id = $3
+  `, [noteId, user.id, workspaceId])
+  if (!note.rowCount) {
     throw createError({ statusCode: 404, statusMessage: 'Note not found' })
   }
 
@@ -48,10 +49,10 @@ export default defineEventHandler(async (event) => {
   await writeFile(filePath, upload.data, { flag: 'wx', mode: 0o600 })
 
   try {
-    db.prepare(`
+    await db.query(`
       INSERT INTO media_assets (id, user_id, note_id, mime_type, extension)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(assetId, user.id, noteId, mediaType.mimeType, mediaType.extension)
+      VALUES ($1, $2, $3, $4, $5)
+    `, [assetId, user.id, noteId, mediaType.mimeType, mediaType.extension])
   } catch (error) {
     try {
       await unlink(filePath)

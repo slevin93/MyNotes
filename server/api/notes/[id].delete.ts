@@ -2,28 +2,28 @@ import { createError, getQuery } from 'h3'
 import { requireAuthenticatedUser } from '../../utils/auth'
 import { useDatabase } from '../../utils/database'
 
-export default defineEventHandler((event) => {
-  const user = requireAuthenticatedUser(event)
+export default defineEventHandler(async (event) => {
+  const user = await requireAuthenticatedUser(event)
   const { id } = getRouterParams(event)
   const workspaceId = getQuery(event).workspaceId
   if (typeof workspaceId !== 'string' || !workspaceId) {
     throw createError({ statusCode: 400, statusMessage: 'Workspace is required' })
   }
-  const db = useDatabase()
-  const result = db.prepare(`
+  const db = await useDatabase()
+  const result = await db.query(`
     WITH RECURSIVE subtree(id) AS (
-      SELECT id FROM notes WHERE id = ? AND user_id = ? AND workspace_id = ?
+      SELECT id FROM notes WHERE id = $1 AND user_id = $2 AND workspace_id = $3
       UNION ALL
       SELECT child.id
       FROM notes child
       JOIN subtree parent ON child.parent_id = parent.id
-      WHERE child.user_id = ? AND child.workspace_id = ?
+      WHERE child.user_id = $4 AND child.workspace_id = $5
     )
     DELETE FROM notes
-    WHERE id IN (SELECT id FROM subtree) AND user_id = ? AND workspace_id = ?
-  `).run(id, user.id, workspaceId, user.id, workspaceId, user.id, workspaceId)
+    WHERE id IN (SELECT id FROM subtree) AND user_id = $6 AND workspace_id = $7
+  `, [id, user.id, workspaceId, user.id, workspaceId, user.id, workspaceId])
 
-  if (result.changes === 0) {
+  if (result.rowCount === 0) {
     throw createError({ statusCode: 404, statusMessage: 'Note not found' })
   }
 

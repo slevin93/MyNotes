@@ -1,6 +1,6 @@
 import { createError, getQuery } from 'h3'
 import { requireAuthenticatedUser } from '../../utils/auth'
-import { useDatabase } from '../../utils/database'
+import { formatTimestamp, useDatabase } from '../../utils/database'
 import type { Note } from '#shared/types'
 
 interface NoteRecord {
@@ -10,37 +10,38 @@ interface NoteRecord {
   title: string
   icon: string
   content: string
-  created_at: string
-  updated_at: string
+  created_at: Date | string
+  updated_at: Date | string
 }
 
-export default defineEventHandler((event): Note[] => {
-  const user = requireAuthenticatedUser(event)
+export default defineEventHandler(async (event): Promise<Note[]> => {
+  const user = await requireAuthenticatedUser(event)
   const workspaceId = getQuery(event).workspaceId
   if (typeof workspaceId !== 'string' || !workspaceId) {
     throw createError({ statusCode: 400, statusMessage: 'Workspace is required' })
   }
 
-  const db = useDatabase()
-  if (!db.prepare('SELECT 1 FROM workspaces WHERE id = ? AND user_id = ?').get(workspaceId, user.id)) {
+  const db = await useDatabase()
+  const workspace = await db.query('SELECT 1 FROM workspaces WHERE id = $1 AND user_id = $2', [workspaceId, user.id])
+  if (!workspace.rowCount) {
     throw createError({ statusCode: 404, statusMessage: 'Workspace not found' })
   }
 
-  const rows = db.prepare(`
+  const result = await db.query<NoteRecord>(`
     SELECT id, workspace_id, parent_id, title, icon, content, created_at, updated_at
     FROM notes
-    WHERE user_id = ? AND workspace_id = ?
+    WHERE user_id = $1 AND workspace_id = $2
     ORDER BY created_at, id
-  `).all(user.id, workspaceId) as NoteRecord[]
+  `, [user.id, workspaceId])
 
-  return rows.map(row => ({
+  return result.rows.map(row => ({
     id: row.id,
     workspaceId: row.workspace_id,
     parentId: row.parent_id,
     title: row.title,
     icon: row.icon,
     content: row.content,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
+    createdAt: formatTimestamp(row.created_at),
+    updatedAt: formatTimestamp(row.updated_at)
   }))
 })

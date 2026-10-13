@@ -1,12 +1,19 @@
 export default defineNuxtRouteMiddleware(async (to) => {
   const requestFetch = useRequestFetch()
-  const { user } = await requestFetch<{ user: { id: string, email: string } | null }>('/api/auth/me')
-  const isAuthPage = ['/login', '/register'].includes(to.path)
+  const { user, setupRequired } = await requestFetch<{
+    user: { id: string, email: string } | null
+    setupRequired: boolean
+  }>('/api/auth/me')
 
-  if (!isAuthPage && !user) {
-    return navigateTo('/login')
+  if (user) {
+    if (to.path === '/login' || to.path === '/setup') {
+      return navigateTo('/')
+    }
+    return
   }
-  if (isAuthPage && user) {
-    return navigateTo('/')
+
+  const requiredPath = setupRequired ? '/setup' : '/login'
+  if (to.path !== requiredPath) {
+    return navigateTo(requiredPath)
   }
 })

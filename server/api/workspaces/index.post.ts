@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { createError, readBody } from 'h3'
 import { requireAuthenticatedUser } from '../../utils/auth'
-import { useDatabase } from '../../utils/database'
+import { formatTimestamp, useDatabase } from '../../utils/database'
 import type { Workspace } from '#shared/types'
 
 interface CreateWorkspaceBody {
@@ -9,7 +9,7 @@ interface CreateWorkspaceBody {
 }
 
 export default defineEventHandler(async (event): Promise<Workspace> => {
-  const user = requireAuthenticatedUser(event)
+  const user = await requireAuthenticatedUser(event)
   const body = await readBody<CreateWorkspaceBody | null>(event) ?? {}
   const name = typeof body.name === 'string' ? body.name.trim() : ''
 
@@ -17,22 +17,26 @@ export default defineEventHandler(async (event): Promise<Workspace> => {
     throw createError({ statusCode: 400, statusMessage: 'Workspace name must be between 1 and 80 characters' })
   }
 
-  const db = useDatabase()
+  const db = await useDatabase()
   const id = randomUUID()
   try {
-    db.prepare('INSERT INTO workspaces (id, user_id, name) VALUES (?, ?, ?)').run(id, user.id, name)
+    await db.query('INSERT INTO workspaces (id, user_id, name) VALUES ($1, $2, $3)', [id, user.id, name])
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (error instanceof Error && 'code' in error && error.code === '23505') {
       throw createError({ statusCode: 409, statusMessage: 'A workspace with this name already exists' })
     }
     throw error
   }
 
-  const row = db.prepare('SELECT id, name, created_at FROM workspaces WHERE id = ?').get(id) as {
+  const result = await db.query<{
     id: string
     name: string
-    created_at: string
+    created_at: Date | string
+  }>('SELECT id, name, created_at FROM workspaces WHERE id = $1', [id])
+  const row = result.rows[0]
+  if (!row) {
+    throw createError({ statusCode: 500, statusMessage: 'Could not load the created workspace' })
   }
 
-  return { id: row.id, name: row.name, createdAt: row.created_at }
+  return { id: row.id, name: row.name, createdAt: formatTimestamp(row.created_at) }
 })

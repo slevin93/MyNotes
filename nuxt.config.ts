@@ -12,7 +12,7 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   runtimeConfig: {
-    databasePath: process.env.NUXT_DATABASE_PATH || '.data/notes.sqlite'
+    databaseUrl: process.env.DATABASE_URL || ''
   },
 
   compatibilityDate: '2026-06-30',

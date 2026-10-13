@@ -7,7 +7,7 @@ interface UpdateWorkspaceBody {
 }
 
 export default defineEventHandler(async (event) => {
-  const user = requireAuthenticatedUser(event)
+  const user = await requireAuthenticatedUser(event)
   const { id } = getRouterParams(event)
   const body = await readBody<UpdateWorkspaceBody | null>(event) ?? {}
   const name = typeof body.name === 'string' ? body.name.trim() : ''
@@ -16,19 +16,19 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Workspace name must be between 1 and 80 characters' })
   }
 
-  const db = useDatabase()
+  const db = await useDatabase()
   try {
-    const result = db.prepare(`
+    const result = await db.query(`
       UPDATE workspaces
-      SET name = ?
-      WHERE id = ? AND user_id = ?
-    `).run(name, id, user.id)
+      SET name = $1
+      WHERE id = $2 AND user_id = $3
+    `, [name, id, user.id])
 
-    if (result.changes === 0) {
+    if (result.rowCount === 0) {
       throw createError({ statusCode: 404, statusMessage: 'Workspace not found' })
     }
   } catch (error) {
-    if (error instanceof Error && 'code' in error && error.code === 'SQLITE_CONSTRAINT_UNIQUE') {
+    if (error instanceof Error && 'code' in error && error.code === '23505') {
       throw createError({ statusCode: 409, statusMessage: 'A workspace with this name already exists' })
     }
     throw error

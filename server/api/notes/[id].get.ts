@@ -1,29 +1,31 @@
 import { createError, getQuery } from 'h3'
 import { requireAuthenticatedUser } from '../../utils/auth'
-import { useDatabase } from '../../utils/database'
+import { formatTimestamp, useDatabase } from '../../utils/database'
 import type { Note } from '#shared/types'
 
-export default defineEventHandler((event): Note => {
-  const user = requireAuthenticatedUser(event)
+export default defineEventHandler(async (event): Promise<Note> => {
+  const user = await requireAuthenticatedUser(event)
   const { id } = getRouterParams(event)
   const workspaceId = getQuery(event).workspaceId
   if (typeof workspaceId !== 'string' || !workspaceId) {
     throw createError({ statusCode: 400, statusMessage: 'Workspace is required' })
   }
 
-  const row = useDatabase().prepare(`
-    SELECT id, workspace_id, parent_id, title, icon, content, created_at, updated_at
-    FROM notes WHERE id = ? AND user_id = ? AND workspace_id = ?
-  `).get(id, user.id, workspaceId) as {
+  const db = await useDatabase()
+  const result = await db.query<{
     id: string
     workspace_id: string
     parent_id: string | null
     title: string
     icon: string
     content: string
-    created_at: string
-    updated_at: string
-  } | undefined
+    created_at: Date | string
+    updated_at: Date | string
+  }>(`
+    SELECT id, workspace_id, parent_id, title, icon, content, created_at, updated_at
+    FROM notes WHERE id = $1 AND user_id = $2 AND workspace_id = $3
+  `, [id, user.id, workspaceId])
+  const row = result.rows[0]
 
   if (!row) {
     throw createError({ statusCode: 404, statusMessage: 'Note not found' })
@@ -36,7 +38,7 @@ export default defineEventHandler((event): Note => {
     title: row.title,
     icon: row.icon,
     content: row.content,
-    createdAt: row.created_at,
-    updatedAt: row.updated_at
+    createdAt: formatTimestamp(row.created_at),
+    updatedAt: formatTimestamp(row.updated_at)
   }
 })

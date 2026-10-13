@@ -25,7 +25,7 @@ const router = useRouter()
 const toast = useToast()
 const open = ref(true)
 const colorMode = useColorMode()
-const isAuthPage = computed(() => ['/login', '/register'].includes(route.path))
+const isAuthPage = computed(() => ['/login', '/setup'].includes(route.path))
 const requestFetch = useRequestFetch()
 
 const { data: authState } = await useAsyncData('auth-state', () =>

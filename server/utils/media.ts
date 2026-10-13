@@ -1,4 +1,4 @@
-import { dirname, resolve } from 'node:path'
+import { resolve } from 'node:path'
 
 export type UploadedMediaType = {
   extension: 'gif' | 'jpg' | 'mp4' | 'png' | 'webm' | 'webp'
@@ -61,7 +61,5 @@ export function getUploadedMediaType(mimeType: string, data: Buffer) {
 }
 
 export function getMediaDirectory() {
-  const config = useRuntimeConfig()
-  const databasePath = resolve(process.cwd(), config.databasePath)
-  return resolve(dirname(databasePath), 'uploads')
+  return resolve(process.cwd(), '.data/uploads')
 }

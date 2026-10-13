@@ -27,13 +27,16 @@ function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex')
 }
 
-export function createUserSession(event: H3Event, user: UserRecord, remember = false) {
-  const db = useDatabase()
+export async function createUserSession(event: H3Event, user: UserRecord, remember = false) {
+  const db = await useDatabase()
   const token = randomBytes(32).toString('base64url')
   const expiresAt = Date.now() + sessionDuration
-  db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(Date.now())
-  db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)')
-    .run(hashToken(token), user.id, expiresAt)
+  await db.query('DELETE FROM sessions WHERE expires_at <= $1', [Date.now()])
+  await db.query('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES ($1, $2, $3)', [
+    hashToken(token),
+    user.id,
+    expiresAt
+  ])
 
   setCookie(event, cookieName, token, {
     httpOnly: true,
@@ -44,19 +47,20 @@ export function createUserSession(event: H3Event, user: UserRecord, remember = f
   })
 }
 
-export function getAuthenticatedUser(event: H3Event): AuthUser | null {
+export async function getAuthenticatedUser(event: H3Event): Promise<AuthUser | null> {
   const token = getCookie(event, cookieName)
   if (!token) {
     return null
   }
 
-  const db = useDatabase()
-  const row = db.prepare(`
+  const db = await useDatabase()
+  const result = await db.query<UserRecord>(`
     SELECT users.id, users.email
     FROM sessions
     JOIN users ON users.id = sessions.user_id
-    WHERE sessions.token_hash = ? AND sessions.expires_at > ?
-  `).get(hashToken(token), Date.now()) as UserRecord | undefined
+    WHERE sessions.token_hash = $1 AND sessions.expires_at > $2
+  `, [hashToken(token), Date.now()])
+  const row = result.rows[0]
 
   if (!row) {
     return null
@@ -65,8 +69,8 @@ export function getAuthenticatedUser(event: H3Event): AuthUser | null {
   return { id: row.id, email: row.email }
 }
 
-export function requireAuthenticatedUser(event: H3Event) {
-  const user = getAuthenticatedUser(event)
+export async function requireAuthenticatedUser(event: H3Event) {
+  const user = await getAuthenticatedUser(event)
   if (!user) {
     throw createError({ statusCode: 401, statusMessage: 'Authentication required' })
   }
@@ -74,10 +78,10 @@ export function requireAuthenticatedUser(event: H3Event) {
   return user
 }
 
-export function clearUserSession(event: H3Event) {
+export async function clearUserSession(event: H3Event) {
   const token = getCookie(event, cookieName)
   if (token) {
-    useDatabase().prepare('DELETE FROM sessions WHERE token_hash = ?').run(hashToken(token))
+    await (await useDatabase()).query('DELETE FROM sessions WHERE token_hash = $1', [hashToken(token)])
   }
 
   deleteCookie(event, cookieName, {

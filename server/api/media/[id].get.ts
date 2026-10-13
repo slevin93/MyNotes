@@ -5,11 +5,13 @@ import { useDatabase } from '../../utils/database'
 import { getMediaDirectory } from '../../utils/media'
 
 export default defineEventHandler(async (event) => {
-  const user = requireAuthenticatedUser(event)
+  const user = await requireAuthenticatedUser(event)
   const { id } = getRouterParams(event)
-  const media = useDatabase().prepare(`
-    SELECT mime_type, extension FROM media_assets WHERE id = ? AND user_id = ?
-  `).get(id, user.id) as { mime_type: string, extension: string } | undefined
+  const db = await useDatabase()
+  const result = await db.query<{ mime_type: string, extension: string }>(`
+    SELECT mime_type, extension FROM media_assets WHERE id = $1 AND user_id = $2
+  `, [id, user.id])
+  const media = result.rows[0]
 
   if (!media) {
     throw createError({ statusCode: 404, statusMessage: 'Media not found' })

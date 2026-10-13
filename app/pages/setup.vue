@@ -5,7 +5,7 @@ const confirmPassword = ref('')
 const errorMessage = ref('')
 const isSubmitting = ref(false)
 
-async function register() {
+async function setupAccount() {
   errorMessage.value = ''
   if (password.value !== confirmPassword.value) {
     errorMessage.value = 'Passwords do not match.'
@@ -14,7 +14,7 @@ async function register() {
 
   isSubmitting.value = true
   try {
-    await $fetch('/api/auth/register', {
+    await $fetch('/api/auth/setup', {
       method: 'POST',
       body: { email: email.value, password: password.value }
     })
@@ -38,16 +38,16 @@ async function register() {
           />
         </span>
         <h1 class="text-2xl font-semibold">
-          Create your account
+          Set up your account
         </h1>
         <p class="mt-1 text-sm text-muted">
-          Keep your notes private and organized.
+          Create the account for this private notes space.
         </p>
       </div>
 
       <form
         class="space-y-4"
-        @submit.prevent="register"
+        @submit.prevent="setupAccount"
       >
         <UFormField
           label="Email"
@@ -99,7 +99,7 @@ async function register() {
           v-if="errorMessage"
           color="error"
           variant="subtle"
-          title="Could not create your account"
+          title="Could not set up your account"
           :description="errorMessage"
         />
         <UButton
@@ -109,14 +109,6 @@ async function register() {
           :loading="isSubmitting"
         />
       </form>
-
-      <p class="mt-5 text-center text-sm text-muted">
-        Already registered?
-        <NuxtLink
-          to="/login"
-          class="font-medium text-primary hover:underline"
-        >Sign in</NuxtLink>
-      </p>
     </UPageCard>
   </main>
 </template>

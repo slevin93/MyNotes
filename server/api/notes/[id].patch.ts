@@ -10,7 +10,7 @@ interface UpdateNoteBody {
 }
 
 export default defineEventHandler(async (event) => {
-  const user = requireAuthenticatedUser(event)
+  const user = await requireAuthenticatedUser(event)
   const { id } = getRouterParams(event)
   const workspaceId = getQuery(event).workspaceId
   if (typeof workspaceId !== 'string' || !workspaceId) {
@@ -37,27 +37,27 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Unsupported note icon' })
   }
 
-  const db = useDatabase()
-  const result = db.prepare(`
+  const db = await useDatabase()
+  const result = await db.query(`
     UPDATE notes
-    SET title = CASE WHEN ? THEN ? ELSE title END,
-        content = CASE WHEN ? THEN ? ELSE content END,
-        icon = CASE WHEN ? THEN ? ELSE icon END,
-    updated_at = CURRENT_TIMESTAMP
-    WHERE id = ? AND user_id = ? AND workspace_id = ?
-  `).run(
-    hasTitle ? 1 : 0,
+    SET title = CASE WHEN $1 THEN $2 ELSE title END,
+        content = CASE WHEN $3 THEN $4 ELSE content END,
+        icon = CASE WHEN $5 THEN $6 ELSE icon END,
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = $7 AND user_id = $8 AND workspace_id = $9
+  `, [
+    hasTitle,
     title ?? '',
-    hasContent ? 1 : 0,
+    hasContent,
     content ?? '',
-    hasIcon ? 1 : 0,
+    hasIcon,
     typeof icon === 'string' ? icon : '',
     id,
     user.id,
     workspaceId
-  )
+  ])
 
-  if (result.changes === 0) {
+  if (result.rowCount === 0) {
     throw createError({ statusCode: 404, statusMessage: 'Note not found' })
   }
 

@@ -5,6 +5,7 @@
   "scripts": {
     "build": "nuxt build",
     "dev": "nuxt dev",
+    "migrate:postgres": "node --env-file-if-exists=.env scripts/migrate-sqlite-to-postgres.mjs",
     "preview": "nuxt preview",
     "postinstall": "nuxt prepare",
     "lint": "eslint .",
@@ -23,11 +24,13 @@
     "@tiptap/extension-emoji": "^3.31.4",
     "better-sqlite3": "^13.0.3",
     "nuxt": "^4.6.0",
+    "pg": "^8.23.1",
     "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@nuxt/eslint": "^1.17.0",
     "@types/better-sqlite3": "^9.6.0",
+    "@types/pg": "^8.23.1",
     "eslint": "^10.12.0",
     "eslint-plugin-better-tailwindcss": "^4.7.0",
     "typescript": "^6.0.3",
