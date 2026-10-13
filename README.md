@@ -16,6 +16,16 @@ Open `http://localhost:3000`. On a new database, the app prompts you to create i
 
 The app creates and checks these PostgreSQL tables at startup: `users`, `sessions`, `workspaces`, `notes`, and `media_assets`. It reports an error and stops using an existing table if required columns are missing.
 
+## Email
+
+Set `MAIL_CREDENTIALS_KEY` in `.env` to a stable 32-byte key encoded as Base64. Generate one with:
+
+```bash
+openssl rand -base64 32
+```
+
+In **Mail settings**, configure one IMAP account for incoming mail and one SMTP account for outgoing mail. Saving verifies both server connections; TLS or STARTTLS is required. Passwords are encrypted in PostgreSQL using `MAIL_CREDENTIALS_KEY`, so keep the key private and back it up. The inbox discovers server folders, syncs when opened and every minute while open, displays email as plain text, and supports replies and remote deletion.
+
 ## Migrating from SQLite
 
 Stop the app, set `DATABASE_URL` in `.env`, and run the importer **before creating an account in PostgreSQL**:

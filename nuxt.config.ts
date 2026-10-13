@@ -12,7 +12,8 @@ export default defineNuxtConfig({
   css: ['~/assets/css/main.css'],
 
   runtimeConfig: {
-    databaseUrl: process.env.DATABASE_URL || ''
+    databaseUrl: process.env.DATABASE_URL || '',
+    mailCredentialsKey: process.env.MAIL_CREDENTIALS_KEY || ''
   },
 
   compatibilityDate: '2026-06-30',

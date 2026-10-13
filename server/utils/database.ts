@@ -18,7 +18,39 @@ const requiredColumns: Record<string, string[]> = {
     'created_at',
     'updated_at'
   ],
-  media_assets: ['id', 'user_id', 'note_id', 'mime_type', 'extension', 'created_at']
+  media_assets: ['id', 'user_id', 'note_id', 'mime_type', 'extension', 'created_at'],
+  mail_settings: [
+    'id',
+    'imap_host',
+    'imap_port',
+    'imap_secure',
+    'imap_username',
+    'imap_password',
+    'smtp_host',
+    'smtp_port',
+    'smtp_secure',
+    'smtp_username',
+    'smtp_password',
+    'from_email',
+    'updated_at'
+  ],
+  email_messages: [
+    'id',
+    'mailbox',
+    'uid_validity',
+    'uid',
+    'message_id',
+    'in_reply_to',
+    'references_header',
+    'sender_name',
+    'sender_email',
+    'recipients',
+    'subject',
+    'text_body',
+    'received_at',
+    'unread',
+    'created_at'
+  ]
 }
 
 export function createPostgresPool(connectionString: string) {
@@ -83,7 +115,44 @@ export async function initializeDatabase(pool: Pool) {
         created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
       );
 
+      CREATE TABLE IF NOT EXISTS mail_settings (
+        id TEXT PRIMARY KEY CHECK (id = 'default'),
+        imap_host TEXT NOT NULL,
+        imap_port INTEGER NOT NULL,
+        imap_secure BOOLEAN NOT NULL,
+        imap_username TEXT NOT NULL,
+        imap_password TEXT NOT NULL,
+        smtp_host TEXT NOT NULL,
+        smtp_port INTEGER NOT NULL,
+        smtp_secure BOOLEAN NOT NULL,
+        smtp_username TEXT NOT NULL,
+        smtp_password TEXT NOT NULL,
+        from_email TEXT NOT NULL,
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE TABLE IF NOT EXISTS email_messages (
+        id TEXT PRIMARY KEY,
+        mailbox TEXT NOT NULL,
+        uid_validity BIGINT NOT NULL,
+        uid BIGINT NOT NULL,
+        message_id TEXT,
+        in_reply_to TEXT,
+        references_header TEXT,
+        sender_name TEXT NOT NULL DEFAULT '',
+        sender_email TEXT NOT NULL,
+        recipients TEXT NOT NULL DEFAULT '',
+        subject TEXT NOT NULL DEFAULT '',
+        text_body TEXT NOT NULL DEFAULT '',
+        received_at TIMESTAMPTZ NOT NULL,
+        unread BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(mailbox, uid_validity, uid)
+      );
+
       CREATE INDEX IF NOT EXISTS media_assets_user_idx ON media_assets(user_id, id);
+      CREATE INDEX IF NOT EXISTS email_messages_folder_received_idx
+        ON email_messages(mailbox, received_at DESC, uid DESC);
       ALTER TABLE notes ADD COLUMN IF NOT EXISTS workspace_id TEXT REFERENCES workspaces(id) ON DELETE CASCADE;
       ALTER TABLE notes ADD COLUMN IF NOT EXISTS icon TEXT NOT NULL DEFAULT 'i-lucide-file-text';
     `)

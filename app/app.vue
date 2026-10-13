@@ -317,6 +317,11 @@ const workspaceItems = computed<DropdownMenuItem[][]>(() => [
 const userItems = computed<DropdownMenuItem[][]>(() => [
   [
     {
+      label: 'Mail settings',
+      icon: 'i-lucide-mail-cog',
+      onSelect: () => navigateTo('/settings/mail')
+    },
+    {
       label: 'Appearance',
       icon: 'i-lucide-sun-moon',
       children: [
@@ -384,7 +389,7 @@ function getErrorMessage(error: unknown) {
     >
       <template #header="{ state }">
         <div
-          v-if="state === 'expanded'"
+          v-if="state === 'expanded' && route.path === '/'"
           class="flex min-w-0 flex-1 items-center gap-1"
         >
           <UDropdownMenu
@@ -407,8 +412,28 @@ function getErrorMessage(error: unknown) {
 
       <template #default="{ state }">
         <div class="space-y-1 px-2 py-3">
+          <UButton
+            icon="i-lucide-notebook-pen"
+            :label="state === 'expanded' ? 'Notes' : undefined"
+            :color="route.path === '/' ? 'primary' : 'neutral'"
+            :variant="route.path === '/' ? 'soft' : 'ghost'"
+            :title="state === 'collapsed' ? 'Notes' : undefined"
+            :aria-current="route.path === '/' ? 'page' : undefined"
+            class="w-full justify-start"
+            @click="router.push('/')"
+          />
+          <UButton
+            icon="i-lucide-inbox"
+            :label="state === 'expanded' ? 'Inbox' : undefined"
+            :color="route.path === '/mail' ? 'primary' : 'neutral'"
+            :variant="route.path === '/mail' ? 'soft' : 'ghost'"
+            :title="state === 'collapsed' ? 'Inbox' : undefined"
+            :aria-current="route.path === '/mail' ? 'page' : undefined"
+            class="w-full justify-start"
+            @click="router.push('/mail')"
+          />
           <div
-            v-if="state === 'expanded'"
+            v-if="state === 'expanded' && route.path === '/'"
             class="flex items-center justify-between gap-2 px-2 pb-1"
           >
             <p class="min-w-0 truncate text-xs font-medium uppercase tracking-wide text-muted">
@@ -428,6 +453,7 @@ function getErrorMessage(error: unknown) {
             </div>
           </div>
           <NoteTree
+            v-if="route.path === '/'"
             :items="noteTree"
             :selected-id="typeof route.query.note === 'string' ? route.query.note : null"
             :collapsed="state === 'collapsed'"
@@ -436,13 +462,13 @@ function getErrorMessage(error: unknown) {
             @delete="deleteNote"
           />
           <p
-            v-if="!noteTree.length && activeWorkspace"
+            v-if="route.path === '/' && !noteTree.length && activeWorkspace"
             class="px-2 py-3 text-sm text-muted"
           >
             {{ notesStatus === 'pending' ? 'Loading notes…' : 'Your notes will appear here.' }}
           </p>
           <p
-            v-if="notesError"
+            v-if="route.path === '/' && notesError"
             class="px-2 py-3 text-sm text-error"
             role="alert"
           >
@@ -479,6 +505,7 @@ function getErrorMessage(error: unknown) {
           @click="open = !open"
         />
         <UButton
+          v-if="route.path === '/'"
           icon="i-lucide-plus"
           label="New note"
           color="neutral"
