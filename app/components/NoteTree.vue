@@ -4,6 +4,7 @@ import type { NoteTreeItem } from '#shared/types'
 defineProps<{
   items: NoteTreeItem[]
   selectedId: string | null
+  collapsed: boolean
 }>()
 
 const emit = defineEmits<{
@@ -11,6 +12,18 @@ const emit = defineEmits<{
   createChild: [id: string]
   delete: [id: string]
 }>()
+
+const collapsedItems = ref(new Set<string>())
+
+function toggleChildren(id: string) {
+  const next = new Set(collapsedItems.value)
+  if (next.has(id)) {
+    next.delete(id)
+  } else {
+    next.add(id)
+  }
+  collapsedItems.value = next
+}
 </script>
 
 <template>
@@ -26,16 +39,33 @@ const emit = defineEmits<{
         <button
           type="button"
           class="flex min-w-0 flex-1 items-center gap-2 truncate px-2 py-1.5 text-left text-sm"
+          :class="collapsed ? 'justify-center px-0' : ''"
           :aria-current="selectedId === item.id ? 'page' : undefined"
+          :title="item.title"
           @click="emit('select', item.id)"
         >
           <UIcon
             :name="item.icon"
             class="size-4 shrink-0"
           />
-          <span class="truncate">{{ item.title }}</span>
+          <span
+            v-if="!collapsed"
+            class="truncate"
+          >{{ item.title }}</span>
         </button>
         <UButton
+          v-if="item.children.length && !collapsed"
+          :icon="collapsedItems.has(item.id) ? 'i-lucide-chevron-right' : 'i-lucide-chevron-down'"
+          color="neutral"
+          variant="ghost"
+          size="xs"
+          :aria-label="collapsedItems.has(item.id) ? 'Expand child notes' : 'Collapse child notes'"
+          :aria-expanded="!collapsedItems.has(item.id)"
+          :title="collapsedItems.has(item.id) ? 'Expand child notes' : 'Collapse child notes'"
+          @click="toggleChildren(item.id)"
+        />
+        <UButton
+          v-if="!collapsed"
           icon="i-lucide-plus"
           color="neutral"
           variant="ghost"
@@ -45,6 +75,7 @@ const emit = defineEmits<{
           @click="emit('createChild', item.id)"
         />
         <UButton
+          v-if="!collapsed"
           icon="i-lucide-trash-2"
           color="error"
           variant="ghost"
@@ -55,12 +86,13 @@ const emit = defineEmits<{
         />
       </div>
       <div
-        v-if="item.children.length"
+        v-if="item.children.length && !collapsed && !collapsedItems.has(item.id)"
         class="ms-3 border-s border-default ps-1"
       >
         <NoteTree
           :items="item.children"
           :selected-id="selectedId"
+          :collapsed="collapsed"
           @select="emit('select', $event)"
           @create-child="emit('createChild', $event)"
           @delete="emit('delete', $event)"

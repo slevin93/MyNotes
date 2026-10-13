@@ -166,7 +166,6 @@ function closeMobileSidebar() {
 
 async function selectNote(id: string) {
   await router.push({ path: '/', query: { workspace: activeWorkspaceId.value, note: id } })
-  closeMobileSidebar()
 }
 
 async function saveWorkspace() {
@@ -383,10 +382,12 @@ function getErrorMessage(error: unknown) {
         body: 'py-0'
       }"
     >
-      <template #header="{ state, open: sidebarOpen }">
-        <div class="flex min-w-0 items-center gap-1">
+      <template #header="{ state }">
+        <div
+          v-if="state === 'expanded'"
+          class="flex min-w-0 flex-1 items-center gap-1"
+        >
           <UDropdownMenu
-            v-if="state === 'expanded'"
             :items="workspaceItems"
             :content="{ align: 'start', collisionPadding: 12 }"
             :ui="{ content: 'w-(--reka-dropdown-menu-trigger-width) min-w-48' }"
@@ -401,21 +402,15 @@ function getErrorMessage(error: unknown) {
               :ui="{ trailingIcon: 'text-dimmed ms-auto' }"
             />
           </UDropdownMenu>
-          <UButton
-            :icon="sidebarOpen ? 'i-lucide-panel-left-close' : 'i-lucide-panel-left-open'"
-            color="neutral"
-            variant="ghost"
-            size="xs"
-            :aria-label="sidebarOpen ? 'Close sidebar' : 'Open sidebar'"
-            :title="sidebarOpen ? 'Close sidebar' : 'Open sidebar'"
-            @click="open = !open"
-          />
         </div>
       </template>
 
-      <template #default>
+      <template #default="{ state }">
         <div class="space-y-1 px-2 py-3">
-          <div class="flex items-center justify-between gap-2 px-2 pb-1">
+          <div
+            v-if="state === 'expanded'"
+            class="flex items-center justify-between gap-2 px-2 pb-1"
+          >
             <p class="min-w-0 truncate text-xs font-medium uppercase tracking-wide text-muted">
               {{ activeWorkspace?.name ?? 'Notes' }}
             </p>
@@ -435,6 +430,7 @@ function getErrorMessage(error: unknown) {
           <NoteTree
             :items="noteTree"
             :selected-id="typeof route.query.note === 'string' ? route.query.note : null"
+            :collapsed="state === 'collapsed'"
             @select="selectNote"
             @create-child="addNote"
             @delete="deleteNote"
